@@ -1,0 +1,11 @@
+service_id,service_name,description,unit_price
+S001,Website Development,Complete website development,15000
+S002,Website Maintenance,Monthly website maintenance,3000
+S003,UI UX Design,UI UX design service,8000
+S004,SEO Optimization,Search engine optimization,5000
+S005,Mobile App Development,Mobile application development,25000
+S006,Cloud Hosting,Cloud hosting service,4000
+S007,Data Analytics,Data analysis and dashboard development,12000
+S008,AI Chatbot Development,AI chatbot development,18000
+S009,Social Media Management,Monthly social media management,6000
+S010,Digital Marketing,Digital marketing campaign,10000
