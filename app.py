@@ -12,646 +12,432 @@ from utils.database import (
 )
 
 
-# =========================================================
-# PAGE CONFIG
-# =========================================================
+# ==================================================
+# PAGE CONFIGURATION
+# ==================================================
 
 st.set_page_config(
-    page_title="InvoiceAI",
+    page_title="InvoiceGen AI",
     page_icon="🧾",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    layout="wide"
 )
 
-
-# =========================================================
-# DATABASE
-# =========================================================
-
+# Create the SQLite database/tables if they do not exist.
 init_database()
 
 
-# =========================================================
-# SESSION STATE
-# =========================================================
+# ==================================================
+# APPLICATION HEADER
+# ==================================================
 
-if "extracted_data" not in st.session_state:
-    st.session_state.extracted_data = None
-
-if "approved" not in st.session_state:
-    st.session_state.approved = False
-
-if "invoice_number" not in st.session_state:
-    st.session_state.invoice_number = None
+st.title("🧾 InvoiceGen AI")
+st.write(
+    "Turn a customer's natural-language request "
+    "into a professional invoice using AI."
+)
 
 
-# =========================================================
-# SIDEBAR
-# =========================================================
+# ==================================================
+# SIDEBAR NAVIGATION
+# ==================================================
 
-with st.sidebar:
+st.sidebar.title("📌 Navigation")
 
-    st.title("🧾 InvoiceAI")
+page = st.sidebar.radio(
+    "Go to",
+    [
+        "🏠 Dashboard",
+        "🧾 New Invoice",
+        "📋 Invoice History"
+    ]
+)
 
-    st.caption("Smart AI-powered invoicing")
+st.sidebar.divider()
 
-    st.divider()
-
-    page = st.radio(
-        "Navigation",
-        [
-            "📊 Dashboard",
-            "➕ New Invoice",
-            "🗂️ Invoice History",
-        ],
-    )
-
-    st.divider()
-
-    st.success("Pricing database connected")
-
-    st.caption(
-        "Prices are read from pricing.csv. "
-        "AI never creates or estimates prices."
-    )
+st.sidebar.caption("💡 AI extracts the request.")
+st.sidebar.caption("📊 Prices come only from the CSV database.")
+st.sidebar.caption("👤 Human approval is required.")
 
 
-# =========================================================
+# ==================================================
 # DASHBOARD
-# =========================================================
+# ==================================================
 
-if page == "📊 Dashboard":
+if page == "🏠 Dashboard":
 
-    invoices = get_all_invoices()
+    st.header("🏠 Dashboard")
 
-    total_invoices = len(invoices)
+    history = get_all_invoices()
+
+    total_invoices = len(history)
 
     approved_invoices = sum(
-        1
-        for invoice in invoices
+        1 for invoice in history
         if invoice["status"] == "Approved"
+    )
+
+    pending_invoices = sum(
+        1 for invoice in history
+        if invoice["status"] == "Pending Review"
     )
 
     total_revenue = sum(
-        float(invoice["total"])
-        for invoice in invoices
+        invoice["total"]
+        for invoice in history
         if invoice["status"] == "Approved"
     )
-
-    total_items = sum(
-        len(invoice["items"])
-        for invoice in invoices
-    )
-
-    st.title("📊 Dashboard")
-
-    st.caption(
-        "Overview of your AI-powered invoicing system."
-    )
-
-    st.divider()
-
-    # -----------------------------------------------------
-    # METRICS
-    # -----------------------------------------------------
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric(
-            "Total Invoices",
-            total_invoices,
+            "📄 Total Invoices",
+            total_invoices
         )
 
     with col2:
         st.metric(
-            "Approved",
-            approved_invoices,
+            "✅ Approved",
+            approved_invoices
         )
 
     with col3:
         st.metric(
-            "Revenue",
-            f"₹{total_revenue:,.0f}",
+            "⏳ Pending Review",
+            pending_invoices
         )
 
     with col4:
         st.metric(
-            "Service Items",
-            total_items,
+            "💰 Total Revenue",
+            f"₹{total_revenue:,.2f}"
         )
 
     st.divider()
 
-    # -----------------------------------------------------
-    # RECENT INVOICES + PRICING
-    # -----------------------------------------------------
+    st.subheader("📋 Recent Invoices")
 
-    left, right = st.columns([2, 1])
+    if history:
 
-    with left:
+        recent_data = []
 
-        with st.container(border=True):
+        for invoice in history:
 
-            st.subheader("🧾 Recent Invoices")
-
-            st.caption(
-                "Your latest approved invoices."
+            recent_data.append(
+                {
+                    "Invoice": invoice["invoice_number"],
+                    "Customer": invoice["customer"],
+                    "Amount": f"₹{invoice['total']:,.2f}",
+                    "Status": invoice["status"],
+                    "Created": invoice["created_at"]
+                }
             )
 
-            if invoices:
+        st.dataframe(
+            pd.DataFrame(recent_data),
+            use_container_width=True,
+            hide_index=True
+        )
 
-                rows = []
+    else:
 
-                for invoice in reversed(
-                    invoices[-10:]
-                ):
+        st.info(
+            "No invoices have been created yet."
+        )
 
-                    rows.append(
-                        {
-                            "Invoice":
-                                invoice["invoice_number"],
-                            "Customer":
-                                invoice["customer"],
-                            "Date":
-                                invoice["created_at"],
-                            "Status":
-                                invoice["status"],
-                            "Total":
-                                f"₹{invoice['total']:,.2f}",
-                        }
-                    )
+    st.divider()
 
-                st.dataframe(
-                    pd.DataFrame(rows),
-                    use_container_width=True,
-                    hide_index=True,
-                )
+    st.subheader("📊 Pricing Data Source")
 
-            else:
-
-                st.info(
-                    "No invoices yet. "
-                    "Create your first invoice "
-                    "from the New Invoice page."
-                )
-
-    with right:
-
-        with st.container(border=True):
-
-            st.subheader("💰 Pricing Database")
-
-            st.caption(
-                "Current pricing source"
-            )
-
-            st.success("Connected")
-
-            st.write(
-                get_pricing_source()
-            )
-
-            st.caption(
-                "Only verified prices are used."
-            )
-
-        with st.container(border=True):
-
-            st.subheader("⚡ How It Works")
-
-            st.write(
-                "1. Customer sends a request"
-            )
-
-            st.write(
-                "2. AI extracts the details"
-            )
-
-            st.write(
-                "3. Services are matched"
-            )
-
-            st.write(
-                "4. Prices are verified"
-            )
-
-            st.write(
-                "5. Human approves"
-            )
-
-            st.write(
-                "6. PDF invoice is generated"
-            )
-
-
-# =========================================================
-# NEW INVOICE
-# =========================================================
-
-elif page == "➕ New Invoice":
-
-    st.title("➕ Create New Invoice")
-
-    st.caption(
-        "Convert a natural-language customer request "
-        "into a verified invoice."
+    st.success(
+        f"Prices are retrieved from: **{get_pricing_source()}**"
     )
 
-    st.divider()
+    st.caption(
+        "The AI does not generate or estimate missing prices."
+    )
 
-    # =====================================================
-    # AI REQUEST
-    # =====================================================
 
-    with st.container(border=True):
+# ==================================================
+# NEW INVOICE
+# ==================================================
 
-        st.subheader("✨ AI Invoice Assistant")
+elif page == "🧾 New Invoice":
+
+    st.header("🧾 Create New Invoice")
+
+    st.write(
+        "Enter the customer's requirement in natural language. "
+        "Gemini AI will extract the invoice details."
+    )
+
+    # ==================================================
+    # CUSTOMER REQUIREMENT
+    # ==================================================
+
+    st.subheader("📩 Customer Requirement")
+
+    customer_message = st.text_area(
+        "Enter the customer's request:",
+        height=180,
+        placeholder=(
+            "Example: Hi, I'm Rahul from ABC Technologies. "
+            "I need 3 website development packages and "
+            "2 months of website maintenance. "
+            "Please deliver within 15 days."
+        )
+    )
+
+    # ==================================================
+    # GENERATE INVOICE
+    # ==================================================
+
+    if st.button(
+        "✨ Generate Invoice",
+        type="primary"
+    ):
+
+        if not customer_message.strip():
+
+            st.warning(
+                "Please enter a customer message."
+            )
+
+        else:
+
+            with st.spinner(
+                "🤖 AI is extracting invoice details..."
+            ):
+
+                try:
+
+                    result = extract_invoice_details(
+                        customer_message
+                    )
+
+                    st.session_state["invoice_data"] = result
+                    st.session_state["approved"] = False
+                    st.session_state.pop("invoice_number", None)
+                    st.session_state.pop("invoice_saved", None)
+
+                    st.success(
+                        "✅ Information extracted successfully!"
+                    )
+
+                except Exception as e:
+
+                    st.error(
+                        f"AI Error: {e}"
+                    )
+
+    # ==================================================
+    # DISPLAY INVOICE REVIEW
+    # ==================================================
+
+    if "invoice_data" in st.session_state:
+
+        result = st.session_state["invoice_data"]
+
+        st.divider()
+
+        st.header("📋 Invoice Review")
 
         st.caption(
-            "Describe what the customer wants in normal "
-            "language. AI will extract the customer, "
-            "email, services, quantity and notes."
+            "Review and edit the AI-extracted information before approval."
         )
 
-        request_text = st.text_area(
-            "Customer Requirement",
-            placeholder=(
-                "Example:\n\n"
-                "Rahul from rahul@abc.com wants 3 website "
-                "development packages and 2 website "
-                "maintenance services. Delivery should "
-                "be within 15 days."
-            ),
-            height=150,
-        )
+        # ==================================================
+        # CUSTOMER DETAILS
+        # ==================================================
 
-        if st.button(
-            "✨ Extract Invoice Details",
-            type="primary",
-            use_container_width=True,
+        st.subheader("👤 Customer Details")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            customer_name = st.text_input(
+                "Customer Name",
+                value=result.get(
+                    "customer_name",
+                    ""
+                )
+            )
+
+        with col2:
+
+            email = st.text_input(
+                "Email",
+                value=result.get(
+                    "email",
+                    ""
+                )
+            )
+
+        # ==================================================
+        # INVOICE ITEMS
+        # ==================================================
+
+        st.subheader("🛒 Invoice Items")
+
+        invoice_items = []
+
+        all_prices_available = True
+
+        for i, service in enumerate(
+            result.get("services", [])
         ):
 
-            if not request_text.strip():
+            original_service_name = service.get(
+                "service_name",
+                ""
+            )
 
-                st.warning(
-                    "Please enter a customer requirement."
+            quantity = int(
+                service.get(
+                    "quantity",
+                    1
                 )
+            )
+
+            col1, col2 = st.columns([4, 1])
+
+            with col1:
+
+                edited_service = st.text_input(
+                    "Service",
+                    value=original_service_name,
+                    key=f"service_{i}"
+                )
+
+            with col2:
+
+                edited_quantity = st.number_input(
+                    "Quantity",
+                    min_value=1,
+                    value=quantity,
+                    step=1,
+                    key=f"quantity_{i}"
+                )
+
+            # --------------------------------------------------
+            # PRICE LOOKUP
+            # --------------------------------------------------
+
+            price_result = find_service_price(
+                edited_service
+            )
+
+            if price_result["found"]:
+
+                unit_price = price_result["price"]
+
+                matched_service = price_result["matched_service"]
+                match_type = price_result["match_type"]
+                source = price_result["source"]
+
+                st.success(
+                    f"✅ Verified Price: ₹{unit_price:,.2f}"
+                )
+
+                info_col1, info_col2, info_col3 = st.columns(3)
+
+                with info_col1:
+                    st.caption(
+                        f"📊 Database Service: **{matched_service}**"
+                    )
+
+                with info_col2:
+                    st.caption(
+                        f"🔎 Match Type: **{match_type}**"
+                    )
+
+                with info_col3:
+                    st.caption(
+                        f"📁 Source: **{source}**"
+                    )
 
             else:
 
-                with st.spinner(
-                    "AI is extracting invoice details..."
-                ):
+                unit_price = 0.0
 
-                    try:
+                all_prices_available = False
 
-                        result = extract_invoice_details(
-                            request_text
-                        )
-
-                        st.session_state.extracted_data = (
-                            result
-                        )
-
-                        st.session_state.approved = False
-
-                        st.session_state.invoice_number = (
-                            None
-                        )
-
-                        st.success(
-                            "AI extraction completed successfully."
-                        )
-
-                    except Exception as error:
-
-                        st.error(
-                            f"AI extraction failed: {error}"
-                        )
-
-
-    # =====================================================
-    # SHOW EXTRACTED INFORMATION
-    # =====================================================
-
-    if st.session_state.extracted_data:
-
-        data = st.session_state.extracted_data
-
-        st.write("")
-
-        # =================================================
-        # CUSTOMER DETAILS
-        # =================================================
-
-        with st.container(border=True):
-
-            st.subheader("👤 Customer Details")
-
-            st.caption(
-                "Review the information extracted by AI."
-            )
-
-            customer_col, email_col = st.columns(2)
-
-            with customer_col:
-
-                customer_name = st.text_input(
-                    "Customer Name",
-                    value=data.get(
-                        "customer_name",
-                        "",
-                    ),
+                st.error(
+                    "⚠️ Price not found"
                 )
-
-            with email_col:
-
-                email = st.text_input(
-                    "Email",
-                    value=data.get(
-                        "email",
-                        "",
-                    ),
-                )
-
-
-        # =================================================
-        # SERVICES
-        # =================================================
-
-        st.write("")
-
-        with st.container(border=True):
-
-            st.subheader(
-                "🛒 Services & Price Verification"
-            )
-
-            st.caption(
-                "Every service is checked against your "
-                "pricing database. The system never "
-                "fabricates missing prices."
-            )
-
-            services = data.get(
-                "services",
-                [],
-            )
-
-            invoice_items = []
-
-            subtotal = 0.0
-
-            all_prices_found = True
-
-            if not services:
 
                 st.warning(
-                    "No services were extracted "
-                    "from the customer request."
+                    f"No verified price found for "
+                    f"'{edited_service}'. "
+                    "The system will NOT generate or estimate a price."
                 )
 
-            for index, item in enumerate(services):
-
-                st.markdown(
-                    f"### Service {index + 1}"
+                st.caption(
+                    f"📁 Price Source: **{price_result['source']}**"
                 )
 
-                service_col, quantity_col = st.columns(
-                    [4, 1]
-                )
-
-                with service_col:
-
-                    service_name = st.text_input(
-                        "Service Name",
-                        value=item.get(
-                            "service_name",
-                            "",
-                        ),
-                        key=f"service_{index}",
+            invoice_items.append(
+                {
+                    "service": edited_service,
+                    "quantity": edited_quantity,
+                    "unit_price": unit_price,
+                    "price_found": price_result["found"],
+                    "matched_service": price_result.get(
+                        "matched_service"
+                    ),
+                    "match_type": price_result.get(
+                        "match_type"
+                    ),
+                    "price_source": price_result.get(
+                        "source"
                     )
-
-                with quantity_col:
-
-                    quantity = st.number_input(
-                        "Quantity",
-                        min_value=1,
-                        value=int(
-                            item.get(
-                                "quantity",
-                                1,
-                            )
-                        ),
-                        step=1,
-                        key=f"quantity_{index}",
-                    )
-
-                # -----------------------------------------
-                # PRICE LOOKUP
-                # -----------------------------------------
-
-                price_result = find_service_price(
-                    service_name
-                )
-
-                if price_result["found"]:
-
-                    unit_price = float(
-                        price_result["price"]
-                    )
-
-                    amount = (
-                        unit_price * quantity
-                    )
-
-                    subtotal += amount
-
-                    matched_service = (
-                        price_result[
-                            "matched_service"
-                        ]
-                    )
-
-                    match_type = (
-                        price_result[
-                            "match_type"
-                        ]
-                    )
-
-                    source = (
-                        price_result[
-                            "source"
-                        ]
-                    )
-
-                    st.success(
-                        f"✓ Price Verified — "
-                        f"₹{unit_price:,.2f}"
-                    )
-
-                    info1, info2, info3 = st.columns(3)
-
-                    with info1:
-
-                        st.caption(
-                            "Database Service"
-                        )
-
-                        st.write(
-                            matched_service
-                        )
-
-                    with info2:
-
-                        st.caption(
-                            "Match Type"
-                        )
-
-                        st.write(
-                            match_type
-                        )
-
-                    with info3:
-
-                        st.caption(
-                            "Price Source"
-                        )
-
-                        st.write(
-                            source
-                        )
-
-                    st.info(
-                        f"{quantity} × "
-                        f"₹{unit_price:,.2f} = "
-                        f"₹{amount:,.2f}"
-                    )
-
-                    invoice_items.append(
-                        {
-                            "service":
-                                service_name,
-
-                            "quantity":
-                                quantity,
-
-                            "unit_price":
-                                unit_price,
-
-                            "amount":
-                                amount,
-
-                            "price_found":
-                                True,
-
-                            "matched_service":
-                                matched_service,
-
-                            "match_type":
-                                match_type,
-
-                            "price_source":
-                                source,
-                        }
-                    )
-
-                else:
-
-                    all_prices_found = False
-
-                    st.error(
-                        f"⚠ Price Not Found — "
-                        f"{service_name}"
-                    )
-
-                    st.warning(
-                        "No verified price exists for "
-                        f"'{service_name}'. "
-                        "The system will NOT invent "
-                        "or estimate a price."
-                    )
-
-                    invoice_items.append(
-                        {
-                            "service":
-                                service_name,
-
-                            "quantity":
-                                quantity,
-
-                            "unit_price":
-                                0,
-
-                            "amount":
-                                0,
-
-                            "price_found":
-                                False,
-
-                            "matched_service":
-                                None,
-
-                            "match_type":
-                                "Not Found",
-
-                            "price_source":
-                                price_result[
-                                    "source"
-                                ],
-                        }
-                    )
-
-
-        # =================================================
-        # NOTES
-        # =================================================
-
-        st.write("")
-
-        with st.container(border=True):
-
-            st.subheader("📝 Invoice Notes")
-
-            notes = st.text_area(
-                "Notes",
-                value=data.get(
-                    "notes",
-                    "",
-                ),
-                placeholder=(
-                    "Delivery timeline, payment terms, "
-                    "additional instructions..."
-                ),
-                height=100,
-                label_visibility="collapsed",
+                }
             )
 
+        # ==================================================
+        # NOTES
+        # ==================================================
 
-        # =================================================
-        # SETTINGS + SUMMARY
-        # =================================================
+        st.subheader("📝 Notes")
 
-        st.write("")
+        notes = st.text_area(
+            "Invoice Notes",
+            value=result.get(
+                "notes",
+                ""
+            ),
+            height=100
+        )
 
-        settings_col, summary_col = st.columns(2)
+        # ==================================================
+        # CALCULATE TOTALS
+        # ==================================================
 
-        with settings_col:
+        subtotal = 0.0
 
-            with st.container(border=True):
+        for item in invoice_items:
 
-                st.subheader(
-                    "⚙ Invoice Settings"
+            if item["price_found"]:
+
+                subtotal += (
+                    item["quantity"]
+                    * item["unit_price"]
                 )
 
-                gst_rate = st.number_input(
-                    "GST Rate (%)",
-                    min_value=0.0,
-                    max_value=100.0,
-                    value=18.0,
-                    step=1.0,
-                )
+        # ==================================================
+        # GST RATE
+        # ==================================================
+
+        st.subheader("🧾 Tax Settings")
+
+        gst_rate = st.number_input(
+            "GST Rate (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=18.0,
+            step=1.0
+        )
 
         gst_amount = (
             subtotal * gst_rate / 100
@@ -661,196 +447,160 @@ elif page == "➕ New Invoice":
             subtotal + gst_amount
         )
 
-        with summary_col:
+        # ==================================================
+        # INVOICE SUMMARY
+        # ==================================================
 
-            with st.container(border=True):
+        st.divider()
 
-                st.subheader(
-                    "💰 Invoice Summary"
-                )
+        st.subheader("💰 Invoice Summary")
 
-                summary1, summary2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
 
-                with summary1:
+        with col1:
 
-                    st.write("Subtotal")
-
-                    st.write(
-                        f"GST ({gst_rate:.0f}%)"
-                    )
-
-                    st.markdown(
-                        "**Total**"
-                    )
-
-                with summary2:
-
-                    st.write(
-                        f"₹{subtotal:,.2f}"
-                    )
-
-                    st.write(
-                        f"₹{gst_amount:,.2f}"
-                    )
-
-                    st.markdown(
-                        f"**₹{total:,.2f}**"
-                    )
-
-
-        # =================================================
-        # PREVIEW
-        # =================================================
-
-        st.write("")
-
-        with st.container(border=True):
-
-            st.subheader(
-                "👁 Invoice Preview"
+            st.metric(
+                "Subtotal",
+                f"₹{subtotal:,.2f}"
             )
 
-            st.caption(
-                "Review the invoice before approval."
+        with col2:
+
+            st.metric(
+                f"GST ({gst_rate:g}%)",
+                f"₹{gst_amount:,.2f}"
             )
 
-            customer_preview, invoice_preview = (
-                st.columns(2)
+        with col3:
+
+            st.metric(
+                "Total",
+                f"₹{total:,.2f}"
             )
 
-            with customer_preview:
+        # ==================================================
+        # INVOICE PREVIEW
+        # ==================================================
 
-                st.write("**Bill To**")
+        st.divider()
 
-                st.write(
-                    customer_name
+        st.subheader("👀 Invoice Preview")
+
+        st.markdown(
+            f"""
+            ### 🧾 INVOICEGEN AI
+
+            **Customer:** {customer_name}
+
+            **Email:** {email}
+
+            ---
+            """
+        )
+
+        preview_data = []
+
+        for item in invoice_items:
+
+            if item["price_found"]:
+
+                amount = (
+                    item["quantity"]
+                    * item["unit_price"]
                 )
 
-                st.caption(
-                    email
+                preview_data.append(
+                    {
+                        "Service": item["service"],
+                        "Database Match": (
+                            item["matched_service"]
+                            or "-"
+                        ),
+                        "Match Type": (
+                            item["match_type"]
+                            or "-"
+                        ),
+                        "Quantity": item["quantity"],
+                        "Unit Price": (
+                            f"₹{item['unit_price']:,.2f}"
+                        ),
+                        "Amount": f"₹{amount:,.2f}"
+                    }
                 )
 
-            with invoice_preview:
+            else:
 
-                st.write(
-                    "**Invoice Number**"
+                preview_data.append(
+                    {
+                        "Service": item["service"],
+                        "Database Match": "Not Found",
+                        "Match Type": "Not Found",
+                        "Quantity": item["quantity"],
+                        "Unit Price": "Price Missing",
+                        "Amount": "Review Required"
+                    }
                 )
 
-                if st.session_state.invoice_number:
+        preview_df = pd.DataFrame(
+            preview_data
+        )
 
-                    st.write(
-                        st.session_state.invoice_number
-                    )
+        st.dataframe(
+            preview_df,
+            use_container_width=True,
+            hide_index=True
+        )
 
-                else:
+        preview_col1, preview_col2 = st.columns(
+            [3, 1]
+        )
 
-                    st.caption(
-                        "Generated after approval"
-                    )
+        with preview_col2:
 
-            st.divider()
-
-            if invoice_items:
-
-                preview_rows = []
-
-                for item in invoice_items:
-
-                    preview_rows.append(
-                        {
-                            "Service":
-                                item["service"],
-
-                            "Database Match":
-                                item.get(
-                                    "matched_service",
-                                    "-"
-                                ),
-
-                            "Match Type":
-                                item.get(
-                                    "match_type",
-                                    "-"
-                                ),
-
-                            "Quantity":
-                                item["quantity"],
-
-                            "Unit Price":
-                                (
-                                    f"₹{item['unit_price']:,.2f}"
-                                    if item["price_found"]
-                                    else "Not Found"
-                                ),
-
-                            "Amount":
-                                (
-                                    f"₹{item['amount']:,.2f}"
-                                    if item["price_found"]
-                                    else "-"
-                                ),
-                        }
-                    )
-
-                st.dataframe(
-                    pd.DataFrame(
-                        preview_rows
-                    ),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-            st.divider()
-
-            total_col1, total_col2 = st.columns(2)
-
-            with total_col1:
-
-                st.write(
-                    f"Subtotal: ₹{subtotal:,.2f}"
-                )
-
-                st.write(
-                    f"GST ({gst_rate:.0f}%): "
-                    f"₹{gst_amount:,.2f}"
-                )
-
-            with total_col2:
-
-                st.metric(
-                    "Total Amount",
-                    f"₹{total:,.2f}",
-                )
-
-
-        # =================================================
-        # APPROVAL
-        # =================================================
-
-        st.write("")
-
-        with st.container(border=True):
-
-            st.subheader(
-                "👤 Human Review & Approval"
+            st.write(
+                f"**Subtotal:** ₹{subtotal:,.2f}"
             )
 
-            if all_prices_found and invoice_items:
+            st.write(
+                f"**GST ({gst_rate:g}%):** "
+                f"₹{gst_amount:,.2f}"
+            )
 
-                st.success(
-                    "All service prices have been verified. "
-                    "The invoice is ready for human approval."
-                )
+            st.markdown(
+                f"### **Total: ₹{total:,.2f}**"
+            )
 
-                if st.button(
-                    "✓ Approve & Generate Invoice",
-                    type="primary",
-                    use_container_width=True,
-                ):
+        st.write(
+            f"**Notes:** {notes}"
+        )
 
-                    invoice_number = (
-                        get_next_invoice_number()
-                    )
+        # ==================================================
+        # APPROVAL SECTION
+        # ==================================================
+
+        st.divider()
+
+        if not all_prices_available:
+
+            st.warning(
+                "⚠️ Invoice cannot be approved yet. "
+                "Please resolve all missing prices."
+            )
+
+        else:
+
+            st.success(
+                "✅ All invoice items have verified prices."
+            )
+
+            if st.button(
+                "✅ Approve Invoice",
+                type="primary"
+            ):
+
+                try:
+
+                    invoice_number = get_next_invoice_number()
 
                     save_invoice(
                         invoice_number=invoice_number,
@@ -862,211 +612,181 @@ elif page == "➕ New Invoice":
                         gst_amount=gst_amount,
                         total=total,
                         notes=notes,
-                        status="Approved",
+                        status="Approved"
                     )
 
-                    st.session_state.approved = True
-
-                    st.session_state.invoice_number = (
-                        invoice_number
-                    )
+                    st.session_state["approved"] = True
+                    st.session_state["invoice_number"] = invoice_number
+                    st.session_state["invoice_saved"] = True
 
                     st.success(
-                        f"Invoice {invoice_number} "
-                        "approved and saved successfully."
+                        f"🎉 Invoice {invoice_number} approved and saved!"
                     )
 
-            else:
+                except Exception as e:
 
-                st.warning(
-                    "Approval is disabled because one or "
-                    "more services do not have a verified price."
-                )
+                    st.error(
+                        f"Could not save invoice: {e}"
+                    )
 
+        # ==================================================
+        # APPROVED INVOICE
+        # ==================================================
 
-        # =================================================
-        # PDF DOWNLOAD
-        # =================================================
+        if st.session_state.get(
+            "approved",
+            False
+        ):
 
-        if st.session_state.approved:
+            st.divider()
 
-            st.write("")
+            st.header("✅ Invoice Approved")
 
-            with st.container(border=True):
+            invoice_number = st.session_state.get(
+                "invoice_number",
+                "INV"
+            )
 
-                st.subheader(
-                    "📄 Final Invoice"
-                )
+            st.write(
+                f"**Invoice Number:** {invoice_number}"
+            )
 
-                st.success(
-                    f"Invoice "
-                    f"{st.session_state.invoice_number} "
-                    "is ready for download."
-                )
+            st.write(
+                f"**Customer:** {customer_name}"
+            )
 
-                pdf_file = generate_invoice_pdf(
-                    customer_name,
-                    email,
-                    invoice_items,
-                    subtotal,
-                    gst_rate,
-                    gst_amount,
-                    total,
-                    notes,
-                    invoice_number=(
-                        st.session_state.invoice_number
-                    ),
+            st.write(
+                f"**Email:** {email}"
+            )
+
+            st.write(
+                f"**Total Amount:** ₹{total:,.2f}"
+            )
+
+            st.success(
+                "The invoice has been approved, "
+                "saved to invoice history, and is ready for export."
+            )
+
+            # ==================================================
+            # GENERATE PDF
+            # ==================================================
+
+            try:
+
+                pdf_data = generate_invoice_pdf(
+                    customer_name=customer_name,
+                    email=email,
+                    invoice_items=invoice_items,
+                    subtotal=subtotal,
+                    gst_rate=gst_rate,
+                    gst_amount=gst_amount,
+                    total=total,
+                    notes=notes,
+                    invoice_number=invoice_number
                 )
 
                 st.download_button(
-                    "📄 Download PDF Invoice",
-                    data=pdf_file,
-                    file_name=(
-                        f"{st.session_state.invoice_number}.pdf"
-                    ),
-                    mime="application/pdf",
-                    use_container_width=True,
+                    label="📄 Download Invoice PDF",
+                    data=pdf_data,
+                    file_name=f"{invoice_number}.pdf",
+                    mime="application/pdf"
+                )
+
+            except Exception as e:
+
+                st.error(
+                    f"PDF generation error: {e}"
                 )
 
 
-# =========================================================
+# ==================================================
 # INVOICE HISTORY
-# =========================================================
+# ==================================================
 
-elif page == "🗂️ Invoice History":
+elif page == "📋 Invoice History":
 
-    st.title("🗂️ Invoice History")
+    st.header("📋 Invoice History")
 
-    st.caption(
-        "Previously approved invoices stored "
-        "in your SQLite database."
-    )
+    history = get_all_invoices()
 
-    st.divider()
-
-    invoices = get_all_invoices()
-
-    if not invoices:
+    if not history:
 
         st.info(
-            "No invoices have been created yet."
+            "No saved invoices yet."
         )
 
     else:
 
-        for invoice in reversed(invoices):
+        for invoice in reversed(history):
 
-            with st.container(border=True):
+            with st.expander(
+                f"{invoice['invoice_number']} — "
+                f"{invoice['customer']} — "
+                f"₹{invoice['total']:,.2f}"
+            ):
 
-                header_col, total_col = st.columns(
-                    [3, 1]
-                )
+                col1, col2, col3 = st.columns(3)
 
-                with header_col:
-
-                    st.subheader(
-                        f"🧾 {invoice['invoice_number']}"
-                    )
-
-                    st.caption(
-                        f"{invoice['customer']} • "
-                        f"{invoice['created_at']}"
-                    )
-
-                with total_col:
-
-                    st.metric(
-                        "Total",
-                        f"₹{invoice['total']:,.2f}",
-                    )
-
-                st.divider()
-
-                info1, info2, info3 = st.columns(3)
-
-                with info1:
-
-                    st.write("**Customer**")
-
+                with col1:
                     st.write(
-                        invoice["customer"]
+                        f"**Customer:** {invoice['customer']}"
                     )
-
-                with info2:
-
-                    st.write("**Email**")
-
                     st.write(
-                        invoice["email"]
+                        f"**Email:** {invoice['email']}"
                     )
 
-                with info3:
+                with col2:
+                    st.write(
+                        f"**Status:** {invoice['status']}"
+                    )
+                    st.write(
+                        f"**Created:** {invoice['created_at']}"
+                    )
 
-                    st.write("**Status**")
+                with col3:
+                    st.write(
+                        f"**Subtotal:** "
+                        f"₹{invoice['subtotal']:,.2f}"
+                    )
+                    st.write(
+                        f"**GST ({invoice['gst_rate']:g}%):** "
+                        f"₹{invoice['gst_amount']:,.2f}"
+                    )
+                    st.write(
+                        f"**Total:** "
+                        f"₹{invoice['total']:,.2f}"
+                    )
 
-                    if invoice["status"] == "Approved":
+                st.markdown("**Items:**")
 
-                        st.success(
-                            invoice["status"]
-                        )
-
-                    else:
-
-                        st.warning(
-                            invoice["status"]
-                        )
-
-                st.write("")
-
-                rows = []
+                history_items = []
 
                 for item in invoice["items"]:
 
-                    amount = (
-                        item["quantity"]
-                        * item["unit_price"]
-                    )
-
-                    rows.append(
+                    history_items.append(
                         {
-                            "Service":
-                                item["service"],
-
-                            "Quantity":
-                                item["quantity"],
-
-                            "Unit Price":
-                                f"₹{item['unit_price']:,.2f}",
-
-                            "Amount":
-                                f"₹{amount:,.2f}",
+                            "Service": item["service"],
+                            "Quantity": item["quantity"],
+                            "Unit Price": (
+                                f"₹{item['unit_price']:,.2f}"
+                            ),
+                            "Price Verified": (
+                                "Yes"
+                                if item["price_found"]
+                                else "No"
+                            )
                         }
                     )
 
-                if rows:
-
-                    st.dataframe(
-                        pd.DataFrame(rows),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-
-                st.write(
-                    f"**Subtotal:** "
-                    f"₹{invoice['subtotal']:,.2f}"
-                )
-
-                st.write(
-                    f"**GST ({invoice['gst_rate']:.0f}%):** "
-                    f"₹{invoice['gst_amount']:,.2f}"
-                )
-
-                st.markdown(
-                    f"### Total: ₹{invoice['total']:,.2f}"
+                st.dataframe(
+                    pd.DataFrame(history_items),
+                    use_container_width=True,
+                    hide_index=True
                 )
 
                 if invoice["notes"]:
 
-                    st.caption(
-                        f"Notes: {invoice['notes']}"
+                    st.write(
+                        f"**Notes:** {invoice['notes']}"
                     )
